@@ -75,22 +75,45 @@ export const calculateHourlyData = (
     }
   });
 
-  const totalTables = new Set(data.tableUsages.map((t) => t.table_id)).size;
+  const totalTablesInRange = new Set(filteredTables.map((t) => t.table_id)).size;
+  const dayCount = Math.max(
+    1,
+    new Set(filteredTables.map((t) => t.open_time.split(' ')[0])).size
+  );
 
   return ['21:00', '22:00', '23:00', '24:00', '25:00', '26:00'].map((hour) => {
     const entry = hourMap.get(hour)!;
-    const activeTablesHour = filteredTables.filter((t) => {
+    const h = parseInt(hour, 10);
+    const activeByDate = new Map<string, Set<string>>();
+
+    filteredTables.forEach((t) => {
       const openHour = parseInt(getHourFromTime(t.open_time), 10);
       const closeHour = parseInt(getHourFromTime(t.close_time), 10);
-      const h = parseInt(hour, 10);
-      return h >= openHour && h < closeHour;
-    }).length;
+      const date = t.open_time.split(' ')[0];
+      if (h >= openHour && h < closeHour) {
+        if (!activeByDate.has(date)) activeByDate.set(date, new Set());
+        activeByDate.get(date)!.add(t.table_id);
+      }
+    });
+
+    const avgActiveTables =
+      dayCount > 0
+        ? Array.from(activeByDate.values()).reduce(
+            (sum, tables) => sum + tables.size,
+            0
+          ) / dayCount
+        : 0;
+
+    const openRate =
+      totalTablesInRange > 0
+        ? Math.min(100, (avgActiveTables / totalTablesInRange) * 100)
+        : 0;
 
     return {
       hour: formatHourLabel(hour),
       revenue: entry.revenue,
       revenueShare: totalRevenue > 0 ? (entry.revenue / totalRevenue) * 100 : 0,
-      tableOpenRate: totalTables > 0 ? (activeTablesHour / totalTables) * 100 : 0,
+      tableOpenRate: openRate,
       avgSpend:
         entry.uniqueCustomers.size > 0
           ? entry.revenue / entry.uniqueCustomers.size
@@ -353,12 +376,15 @@ export const calculateCustomerStructure = (
     { range: '10次以上', min: 11, max: Infinity },
   ];
 
+  const activeReturningCustomers = data.customers.filter(
+    (c) => activeCustomerIds.has(c.customer_id) && c.total_visits >= 2
+  );
+
   const visitFrequency = freqRanges.map((r) => {
-    const count = data.customers.filter(
+    const count = activeReturningCustomers.filter(
       (c) => c.total_visits >= r.min && c.total_visits <= r.max
     ).length;
-    const totalReturning = data.customers.filter((c) => c.total_visits >= 2)
-      .length;
+    const totalReturning = activeReturningCustomers.length;
     return {
       range: r.range,
       count,

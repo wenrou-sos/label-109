@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Calendar, RefreshCw, Download } from 'lucide-react';
+import { Calendar, RefreshCw, Download, Loader2 } from 'lucide-react';
 import type { DateRange } from '../../types';
 
 interface DateFilterProps {
@@ -7,6 +7,7 @@ interface DateFilterProps {
   onChange: (range: DateRange) => void;
   onRefresh: () => void;
   onExport: () => void;
+  exporting?: boolean;
 }
 
 const DateFilter: React.FC<DateFilterProps> = ({
@@ -14,6 +15,7 @@ const DateFilter: React.FC<DateFilterProps> = ({
   onChange,
   onRefresh,
   onExport,
+  exporting = false,
 }) => {
   const [showPicker, setShowPicker] = useState(false);
 
@@ -86,9 +88,19 @@ const DateFilter: React.FC<DateFilterProps> = ({
         <RefreshCw size={16} />
         <span className="text-sm hidden sm:inline">刷新</span>
       </button>
-      <button onClick={onExport} className="btn-primary flex items-center gap-2">
-        <Download size={16} />
-        <span className="text-sm hidden sm:inline">导出</span>
+      <button
+        onClick={onExport}
+        disabled={exporting}
+        className="btn-primary flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+      >
+        {exporting ? (
+          <Loader2 size={16} className="animate-spin" />
+        ) : (
+          <Download size={16} />
+        )}
+        <span className="text-sm hidden sm:inline">
+          {exporting ? '导出中...' : '导出'}
+        </span>
       </button>
     </div>
   );

@@ -8,6 +8,7 @@ interface HeaderProps {
   onDateChange: (range: DateRange) => void;
   onRefresh: () => void;
   onExport: () => void;
+  exporting?: boolean;
 }
 
 const Header: React.FC<HeaderProps> = ({
@@ -15,6 +16,7 @@ const Header: React.FC<HeaderProps> = ({
   onDateChange,
   onRefresh,
   onExport,
+  exporting = false,
 }) => {
   return (
     <header className="sticky top-0 z-40 bg-charcoal-950/80 backdrop-blur-lg border-b border-charcoal-800">
@@ -45,6 +47,7 @@ const Header: React.FC<HeaderProps> = ({
             onChange={onDateChange}
             onRefresh={onRefresh}
             onExport={onExport}
+            exporting={exporting}
           />
         </div>
       </div>

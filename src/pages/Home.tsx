@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo } from 'react';
-import { Loader2, AlertCircle } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Loader2, AlertCircle, CheckCircle, X } from 'lucide-react';
 import { useDataStore } from '../store/useDataStore';
 import {
   calculateHourlyData,
@@ -13,6 +13,7 @@ import {
   calculateEmployeePerformance,
   calculateKPIs,
 } from '../utils/dataProcessor';
+import { exportAllReports } from '../utils/exportData';
 import KPICards from '../components/common/KPICards';
 import Header from '../components/common/Header';
 import RankingList, { RankingItemData } from '../components/common/RankingList';
@@ -30,10 +31,21 @@ const formatQuantity = (n: number) => n.toLocaleString('zh-CN');
 export default function Home() {
   const { loading, error, data, dateRange, loadData, setDateRange } =
     useDataStore();
+  const [exporting, setExporting] = useState(false);
+  const [toast, setToast] = useState<{
+    show: boolean;
+    type: 'success' | 'error';
+    message: string;
+  } | null>(null);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  const showToast = (type: 'success' | 'error', message: string) => {
+    setToast({ show: true, type, message });
+    setTimeout(() => setToast(null), 4000);
+  };
 
   const hourlyData = useMemo(
     () => calculateHourlyData(data, dateRange),
@@ -133,8 +145,21 @@ export default function Home() {
     })
   );
 
-  const handleExport = () => {
-    alert('数据导出功能演示：已生成经营报表CSV');
+  const handleExport = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const result = exportAllReports(data, dateRange);
+      showToast(
+        'success',
+        `导出成功！已生成 ${result.fileCount} 个CSV报表文件`
+      );
+    } catch (err) {
+      showToast('error', '导出失败，请重试');
+      console.error(err);
+    } finally {
+      setExporting(false);
+    }
   };
 
   if (loading) {
@@ -170,6 +195,7 @@ export default function Home() {
         onDateChange={setDateRange}
         onRefresh={loadData}
         onExport={handleExport}
+        exporting={exporting}
       />
 
       <main className="container mx-auto px-4 py-6 space-y-6">
@@ -331,6 +357,29 @@ export default function Home() {
           <p className="mt-1 text-xs">数据每小时自动更新 · 仅供内部经营决策参考</p>
         </footer>
       </main>
+
+      {toast?.show && (
+        <div
+          className={`fixed bottom-8 right-8 z-50 flex items-center gap-3 px-5 py-4 rounded-xl shadow-card animate-slide-up ${
+            toast.type === 'success'
+              ? 'bg-gradient-to-r from-emerald-900/90 to-emerald-800/90 border border-emerald-600/50'
+              : 'bg-gradient-to-r from-wine-900/90 to-wine-800/90 border border-wine-600/50'
+          }`}
+        >
+          {toast.type === 'success' ? (
+            <CheckCircle className="text-emerald-300 flex-shrink-0" size={20} />
+          ) : (
+            <AlertCircle className="text-wine-300 flex-shrink-0" size={20} />
+          )}
+          <p className="text-ivory-100 text-sm font-medium">{toast.message}</p>
+          <button
+            onClick={() => setToast(null)}
+            className="ml-2 text-charcoal-400 hover:text-ivory-200 transition-colors"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
     </div>
   );
 }
