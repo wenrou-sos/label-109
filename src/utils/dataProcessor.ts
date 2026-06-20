@@ -1059,11 +1059,12 @@ export const calculateMembershipAnalysis = (
     c.categories.set(category, (c.categories.get(category) || 0) + sale.quantity);
   });
 
-  const levelData = new Map<string, { memberCount: number; totalSpent: number; totalVisits: number; categories: Map<string, number> }>();
+  const levelData = new Map<string, { memberCount: number; activeMemberCount: number; totalSpent: number; totalVisits: number; categories: Map<string, number> }>();
 
   levelOrder.forEach((level) => {
     levelData.set(level, {
       memberCount: 0,
+      activeMemberCount: 0,
       totalSpent: 0,
       totalVisits: 0,
       categories: new Map<string, number>(),
@@ -1072,10 +1073,13 @@ export const calculateMembershipAnalysis = (
 
   data.customers.forEach((customer) => {
     const level = customer.membership_level || '普通';
+    if (!levelData.has(level)) return;
+    const l = levelData.get(level)!;
+    l.memberCount++;
+
     const stat = customerMap.get(customer.customer_id);
-    if (stat && levelData.has(level)) {
-      const l = levelData.get(level)!;
-      l.memberCount++;
+    if (stat) {
+      l.activeMemberCount++;
       l.totalSpent += stat.totalSpent;
       l.totalVisits += stat.visitDates.size;
       stat.categories.forEach((count, cat) => {
@@ -1097,8 +1101,8 @@ export const calculateMembershipAnalysis = (
         countShare: totalMembers > 0 ? (d.memberCount / totalMembers) * 100 : 0,
         totalSpent: d.totalSpent,
         spentShare: totalSpentAll > 0 ? (d.totalSpent / totalSpentAll) * 100 : 0,
-        avgSpend: d.memberCount > 0 ? d.totalSpent / d.memberCount : 0,
-        avgVisits: d.memberCount > 0 ? d.totalVisits / d.memberCount : 0,
+        avgSpend: d.activeMemberCount > 0 ? d.totalSpent / d.activeMemberCount : 0,
+        avgVisits: d.activeMemberCount > 0 ? d.totalVisits / d.activeMemberCount : 0,
       };
     });
 
