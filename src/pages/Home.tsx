@@ -15,9 +15,10 @@ import {
   generateDrilldownData,
   getPreviousPeriod,
   calculateChangeRate,
+  searchData,
 } from '../utils/dataProcessor';
 import { exportAllReports } from '../utils/exportData';
-import type { DrilldownSource, DrilldownData } from '../types';
+import type { DrilldownSource, DrilldownData, SearchResultItem } from '../types';
 import KPICards from '../components/common/KPICards';
 import Header from '../components/common/Header';
 import RankingList, { RankingItemData } from '../components/common/RankingList';
@@ -42,10 +43,33 @@ export default function Home() {
     type: 'success' | 'error';
     message: string;
   } | null>(null);
+  const [searchKeyword, setSearchKeyword] = useState('');
+  const [highlightSectionId, setHighlightSectionId] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  const searchResults = useMemo(
+    () => searchData(data, searchKeyword),
+    [data, searchKeyword]
+  );
+
+  const handleSearch = (keyword: string) => {
+    setSearchKeyword(keyword);
+  };
+
+  const handleSelectSearchResult = (item: SearchResultItem) => {
+    setHighlightSectionId(item.sectionId);
+    setTimeout(() => setHighlightSectionId(null), 2500);
+    const el = document.getElementById(item.sectionId);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
+  const getHighlightClass = (sectionId: string) =>
+    highlightSectionId === sectionId ? 'card-highlight' : '';
 
   const showToast = (type: 'success' | 'error', message: string) => {
     setToast({ show: true, type, message });
@@ -245,6 +269,9 @@ export default function Home() {
         onRefresh={loadData}
         onExport={handleExport}
         exporting={exporting}
+        searchResults={searchResults}
+        onSearch={handleSearch}
+        onSelectResult={handleSelectSearchResult}
       />
 
       <main className="container mx-auto px-4 py-6 space-y-6">
@@ -272,7 +299,10 @@ export default function Home() {
         </section>
 
         <section className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <div className="card animate-slide-up">
+          <div
+            id="section-sales-ranking"
+            className={`card animate-slide-up ${getHighlightClass('section-sales-ranking')}`}
+          >
             <div className="card-header">
               <div>
                 <h2 className="card-title">酒水单品销量 TOP20</h2>
@@ -317,7 +347,10 @@ export default function Home() {
         </section>
 
         <section className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <div className="card animate-slide-up">
+          <div
+            id="section-turnover"
+            className={`card animate-slide-up ${getHighlightClass('section-turnover')}`}
+          >
             <div className="card-header">
               <div>
                 <h2 className="card-title">翻台率分析</h2>
@@ -350,7 +383,10 @@ export default function Home() {
         </section>
 
         <section className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <div className="card animate-slide-up">
+          <div
+            id="section-customer-structure"
+            className={`card animate-slide-up ${getHighlightClass('section-customer-structure')}`}
+          >
             <div className="card-header">
               <div>
                 <h2 className="card-title">客户结构分析</h2>

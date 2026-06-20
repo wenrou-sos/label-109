@@ -123,4 +123,72 @@ body::before {
   .rank-number.other {
     @apply bg-charcoal-700 text-charcoal-300;
   }
+
+  .card-highlight {
+    animation: card-highlight-pulse 1.5s ease-in-out 0s 2;
+    border-color: rgba(201, 169, 98, 0.8) !important;
+    box-shadow: 0 0 20px rgba(201, 169, 98, 0.4),
+                0 0 40px rgba(201, 169, 98, 0.2),
+                inset 0 0 20px rgba(201, 169, 98, 0.05) !important;
+  }
+}
+
+@keyframes card-highlight-pulse {
+  0%, 100% {
+    border-color: rgba(201, 169, 98, 0.8);
+    box-shadow: 0 0 20px rgba(201, 169, 98, 0.4),
+                0 0 40px rgba(201, 169, 98, 0.2),
+                inset 0 0 20px rgba(201, 169, 98, 0.05);
+    transform: scale(1);
+  }
+  50% {
+    border-color: rgba(232, 208, 149, 1);
+    box-shadow: 0 0 30px rgba(232, 208, 149, 0.6),
+                0 0 60px rgba(232, 208, 149, 0.3),
+                inset 0 0 30px rgba(232, 208, 149, 0.08);
+    transform: scale(1.008);
+  }
+}
+
+@layer utilities {
+  .animate-slide-up {
+    animation: slide-up 0.5s ease-out both;
+  }
+
+  .animate-fade-in {
+    animation: fade-in 0.5s ease-out both;
+  }
+
+  .animate-pulse-slow {
+    animation: shimmer 3s ease-in-out infinite;
+  }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes shimmer {
+  0%, 100% {
+    background-position: 200% center;
+  }
+  50% {
+    background-position: 0% center;
+  }
 }

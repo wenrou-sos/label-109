@@ -150,6 +150,16 @@ export interface DrilldownData {
   rows: Record<string, unknown>[];
 }
 
+export type SearchTargetCategory = 'drink' | 'customer' | 'table';
+
+export interface SearchResultItem {
+  id: string;
+  name: string;
+  category: SearchTargetCategory;
+  sectionId: string;
+  matchedText: string;
+}
+
 export type DrilldownSource =
   | { type: 'hourly'; hour: string }
   | { type: 'salesItem'; itemId: string; itemName: string }

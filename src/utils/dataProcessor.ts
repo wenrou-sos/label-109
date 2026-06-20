@@ -11,6 +11,7 @@ import type {
   DrilldownSource,
   DrilldownData,
   DrilldownColumn,
+  SearchResultItem,
 } from '../types';
 
 const isInDateRange = (datetimeStr: string, range: DateRange): boolean => {
@@ -955,4 +956,55 @@ export const generateDrilldownData = (
     default:
       return null;
   }
+};
+
+export const searchData = (
+  data: BarData,
+  keyword: string
+): SearchResultItem[] => {
+  if (!keyword.trim()) return [];
+  const kw = keyword.trim().toLowerCase();
+  const results: SearchResultItem[] = [];
+
+  data.menuItems.forEach((item) => {
+    if (item.name.toLowerCase().includes(kw)) {
+      results.push({
+        id: item.item_id,
+        name: item.name,
+        category: 'drink',
+        sectionId: 'section-sales-ranking',
+        matchedText: item.name,
+      });
+    }
+  });
+
+  data.customers.forEach((c) => {
+    if (c.name.toLowerCase().includes(kw)) {
+      results.push({
+        id: c.customer_id,
+        name: c.name,
+        category: 'customer',
+        sectionId: 'section-customer-structure',
+        matchedText: c.name,
+      });
+    }
+  });
+
+  const tableIds = new Set<string>();
+  data.tableUsages.forEach((t) => {
+    if (!tableIds.has(t.table_id)) {
+      tableIds.add(t.table_id);
+      if (t.table_id.toLowerCase().includes(kw)) {
+        results.push({
+          id: t.table_id,
+          name: t.table_id,
+          category: 'table',
+          sectionId: 'section-turnover',
+          matchedText: t.table_id,
+        });
+      }
+    }
+  });
+
+  return results.slice(0, 20);
 };
