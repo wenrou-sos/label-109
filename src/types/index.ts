@@ -118,6 +118,29 @@ export interface AgeGroupPreference {
   share: number;
 }
 
+export interface MembershipLevelData {
+  level: string;
+  memberCount: number;
+  countShare: number;
+  totalSpent: number;
+  spentShare: number;
+  avgSpend: number;
+  avgVisits: number;
+}
+
+export interface MembershipPreference {
+  level: string;
+  category: string;
+  count: number;
+  share: number;
+}
+
+export interface MembershipAnalysis {
+  levels: MembershipLevelData[];
+  preferences: MembershipPreference[];
+  categories: string[];
+}
+
 export interface DemographicData {
   ageGenderDistribution: { group: string; male: number; female: number; total: number }[];
   genderRatio: { male: number; female: number; maleShare: number; femaleShare: number };

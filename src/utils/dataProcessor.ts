@@ -12,6 +12,9 @@ import type {
   DrilldownData,
   DrilldownColumn,
   SearchResultItem,
+  MembershipAnalysis,
+  MembershipLevelData,
+  MembershipPreference,
 } from '../types';
 
 export const isInDateRange = (datetimeStr: string, range: DateRange): boolean => {
@@ -1019,3 +1022,108 @@ export const searchData = (
 
   return results.slice(0, 20);
 };
+
+const levelOrder = ['普通', '银卡', '金卡', '钻石'];
+
+const levelColorMap: Record<string, string> = {
+  普通: '#8B7355',
+  银卡: '#C0C0C0',
+  金卡: '#C9A962',
+  钻石: '#B9F2FF',
+};
+
+export const calculateMembershipAnalysis = (
+  data: BarData,
+  range: DateRange
+): MembershipAnalysis => {
+  const filteredSales = data.salesRecords.filter((s) =>
+    isInDateRange(s.sale_time, range)
+  );
+
+  const customerMap = new Map<string, { totalSpent: number; visitDates: Set<string>; categories: Map<string, number> }>();
+
+  filteredSales.forEach((sale) => {
+    const menuItem = data.menuItems.find((m) => m.item_id === sale.item_id);
+    const category = menuItem?.category || '其他';
+
+    if (!customerMap.has(sale.customer_id)) {
+      customerMap.set(sale.customer_id, {
+        totalSpent: 0,
+        visitDates: new Set<string>(),
+        categories: new Map<string, number>(),
+      });
+    }
+    const c = customerMap.get(sale.customer_id)!;
+    c.totalSpent += sale.unit_price * sale.quantity;
+    c.visitDates.add(sale.sale_time.split(' ')[0]);
+    c.categories.set(category, (c.categories.get(category) || 0) + sale.quantity);
+  });
+
+  const levelData = new Map<string, { memberCount: number; totalSpent: number; totalVisits: number; categories: Map<string, number> }>();
+
+  levelOrder.forEach((level) => {
+    levelData.set(level, {
+      memberCount: 0,
+      totalSpent: 0,
+      totalVisits: 0,
+      categories: new Map<string, number>(),
+    });
+  });
+
+  data.customers.forEach((customer) => {
+    const level = customer.membership_level || '普通';
+    const stat = customerMap.get(customer.customer_id);
+    if (stat && levelData.has(level)) {
+      const l = levelData.get(level)!;
+      l.memberCount++;
+      l.totalSpent += stat.totalSpent;
+      l.totalVisits += stat.visitDates.size;
+      stat.categories.forEach((count, cat) => {
+        l.categories.set(cat, (l.categories.get(cat) || 0) + count);
+      });
+    }
+  });
+
+  const totalMembers = Array.from(levelData.values()).reduce((s, v) => s + v.memberCount, 0);
+  const totalSpentAll = Array.from(levelData.values()).reduce((s, v) => s + v.totalSpent, 0);
+
+  const levels: MembershipLevelData[] = levelOrder
+    .filter((level) => levelData.get(level)!.memberCount > 0)
+    .map((level) => {
+      const d = levelData.get(level)!;
+      return {
+        level,
+        memberCount: d.memberCount,
+        countShare: totalMembers > 0 ? (d.memberCount / totalMembers) * 100 : 0,
+        totalSpent: d.totalSpent,
+        spentShare: totalSpentAll > 0 ? (d.totalSpent / totalSpentAll) * 100 : 0,
+        avgSpend: d.memberCount > 0 ? d.totalSpent / d.memberCount : 0,
+        avgVisits: d.memberCount > 0 ? d.totalVisits / d.memberCount : 0,
+      };
+    });
+
+  const categoriesSet = new Set<string>();
+  levelData.forEach((d) => {
+    d.categories.forEach((_, cat) => categoriesSet.add(cat));
+  });
+  const categories = Array.from(categoriesSet);
+
+  const preferences: MembershipPreference[] = [];
+  levels.forEach(({ level }) => {
+    const d = levelData.get(level)!;
+    const levelTotal = Array.from(d.categories.values()).reduce((s, v) => s + v, 0);
+    categories.forEach((cat) => {
+      const count = d.categories.get(cat) || 0;
+      preferences.push({
+        level,
+        category: cat,
+        count,
+        share: levelTotal > 0 ? (count / levelTotal) * 100 : 0,
+      });
+    });
+  });
+
+  return { levels, preferences, categories };
+};
+
+export { levelColorMap };

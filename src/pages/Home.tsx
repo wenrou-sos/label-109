@@ -17,6 +17,7 @@ import {
   calculateChangeRate,
   searchData,
   isInDateRange,
+  calculateMembershipAnalysis,
 } from '../utils/dataProcessor';
 import { exportAllReports } from '../utils/exportData';
 import type { DrilldownSource, DrilldownData, SearchResultItem } from '../types';
@@ -29,6 +30,7 @@ import SalesRankingChart from '../components/charts/SalesRankingChart';
 import TurnoverChart from '../components/charts/TurnoverChart';
 import CustomerStructureChart from '../components/charts/CustomerStructureChart';
 import DemographicsChart from '../components/charts/DemographicsChart';
+import MembershipAnalysisChart from '../components/charts/MembershipAnalysisChart';
 
 const formatCurrency = (n: number) =>
   '¥' + n.toLocaleString('zh-CN', { maximumFractionDigits: 0 });
@@ -198,6 +200,11 @@ export default function Home() {
 
   const employeePerformance = useMemo(
     () => calculateEmployeePerformance(data, dateRange),
+    [data, dateRange]
+  );
+
+  const membershipAnalysis = useMemo(
+    () => calculateMembershipAnalysis(data, dateRange),
     [data, dateRange]
   );
 
@@ -476,6 +483,16 @@ export default function Home() {
               <DrilldownPanel data={drilldownData} onClose={closeDrilldown} />
             )}
           </div>
+        </section>
+
+        <section className="card animate-slide-up">
+          <div className="card-header">
+            <div>
+              <h2 className="card-title">会员等级深度分析</h2>
+              <p className="card-subtitle">各等级人数、消费力与酒水偏好对比</p>
+            </div>
+          </div>
+          <MembershipAnalysisChart data={membershipAnalysis} />
         </section>
 
         <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
