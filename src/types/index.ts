@@ -141,6 +141,20 @@ export interface MembershipAnalysis {
   categories: string[];
 }
 
+export interface TurnoverHeatmapCell {
+  tableType: string;
+  hour: string;
+  openCount: number;
+  totalMinutes: number;
+  busyScore: number;
+}
+
+export interface TurnoverHeatmapData {
+  hours: string[];
+  tableTypes: string[];
+  cells: TurnoverHeatmapCell[];
+}
+
 export interface DemographicData {
   ageGenderDistribution: { group: string; male: number; female: number; total: number }[];
   genderRatio: { male: number; female: number; maleShare: number; femaleShare: number };

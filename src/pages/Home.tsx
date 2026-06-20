@@ -8,6 +8,7 @@ import {
   calculateCocktailRanking,
   calculateTableTurnover,
   calculateTurnoverByType,
+  calculateTurnoverHeatmap,
   calculateCustomerStructure,
   calculateDemographics,
   calculateEmployeePerformance,
@@ -28,6 +29,7 @@ import DrilldownPanel from '../components/common/DrilldownPanel';
 import TimeAnalysisChart from '../components/charts/TimeAnalysisChart';
 import SalesRankingChart from '../components/charts/SalesRankingChart';
 import TurnoverChart from '../components/charts/TurnoverChart';
+import TurnoverHeatmapChart from '../components/charts/TurnoverHeatmapChart';
 import CustomerStructureChart from '../components/charts/CustomerStructureChart';
 import DemographicsChart from '../components/charts/DemographicsChart';
 import MembershipAnalysisChart from '../components/charts/MembershipAnalysisChart';
@@ -186,6 +188,11 @@ export default function Home() {
   const turnoverByType = useMemo(
     () => calculateTurnoverByType(tableTurnover),
     [tableTurnover]
+  );
+
+  const turnoverHeatmap = useMemo(
+    () => calculateTurnoverHeatmap(data, dateRange),
+    [data, dateRange]
   );
 
   const customerStructure = useMemo(
@@ -411,7 +418,7 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <section className="grid grid-cols-1 xl:grid-cols-3 gap-6">
           <div
             id="section-turnover"
             className={`card animate-slide-up ${getHighlightClass('section-turnover')}`}
@@ -436,6 +443,19 @@ export default function Home() {
           </div>
 
           <div className="card animate-slide-up" style={{ animationDelay: '50ms' }}>
+            <div className="card-header">
+              <div>
+                <h2 className="card-title">时段桌型热度</h2>
+                <p className="card-subtitle">各时段各区域繁忙度分布 · 颜色越深越忙</p>
+              </div>
+            </div>
+            <TurnoverHeatmapChart
+              data={turnoverHeatmap}
+              onDrilldown={handleDrilldown('turnover')}
+            />
+          </div>
+
+          <div className="card animate-slide-up" style={{ animationDelay: '100ms' }}>
             <div className="card-header">
               <div>
                 <h2 className="card-title">单品销量明细 TOP10</h2>

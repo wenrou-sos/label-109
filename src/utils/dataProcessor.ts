@@ -15,6 +15,8 @@ import type {
   MembershipAnalysis,
   MembershipLevelData,
   MembershipPreference,
+  TurnoverHeatmapData,
+  TurnoverHeatmapCell,
 } from '../types';
 
 export const isInDateRange = (datetimeStr: string, range: DateRange): boolean => {
@@ -1128,6 +1130,97 @@ export const calculateMembershipAnalysis = (
   });
 
   return { levels, preferences, categories };
+};
+
+export const calculateTurnoverHeatmap = (
+  data: BarData,
+  range: DateRange
+): TurnoverHeatmapData => {
+  const hours = ['21:00', '22:00', '23:00', '00:00', '01:00', '02:00'];
+  const tableTypes = ['吧台', '卡座', '包间'];
+
+  const filteredTables = data.tableUsages.filter((t) =>
+    isInDateRange(t.open_time, range)
+  );
+
+  const heatmapMap = new Map<string, { openCount: number; totalMinutes: number }>();
+
+  tableTypes.forEach((type) => {
+    hours.forEach((hour) => {
+      heatmapMap.set(`${type}-${hour}`, { openCount: 0, totalMinutes: 0 });
+    });
+  });
+
+  filteredTables.forEach((t) => {
+    const openTime = t.open_time;
+    const closeTime = t.close_time;
+    const tableType = t.table_type;
+
+    if (!tableTypes.includes(tableType)) return;
+
+    const open = new Date(openTime).getTime();
+    const close = new Date(closeTime).getTime();
+    const totalMinutes = Math.max(30, (close - open) / 60000);
+
+    const openHourKey = getHourFromTime(openTime);
+    const openHourNum = parseInt(openHourKey, 10);
+
+    const closeHourKey = getHourFromTime(closeTime);
+    const closeHourNum = parseInt(closeHourKey, 10);
+
+    const hoursToDistribute: string[] = [];
+    for (let h = openHourNum; h < closeHourNum; h++) {
+      const hourNum = h >= 24 ? h - 24 : h;
+      const hourStr = `${hourNum.toString().padStart(2, '0')}:00`;
+      if (hours.includes(hourStr)) {
+        hoursToDistribute.push(hourStr);
+      }
+    }
+
+    if (hoursToDistribute.length === 0) {
+      const hourNum = openHourNum >= 24 ? openHourNum - 24 : openHourNum;
+      const hourStr = `${hourNum.toString().padStart(2, '0')}:00`;
+      if (hours.includes(hourStr)) {
+        hoursToDistribute.push(hourStr);
+      }
+    }
+
+    const minutesPerHour = totalMinutes / hoursToDistribute.length;
+
+    hoursToDistribute.forEach((hour) => {
+      const key = `${tableType}-${hour}`;
+      const entry = heatmapMap.get(key);
+      if (entry) {
+        entry.openCount += 1 / hoursToDistribute.length;
+        entry.totalMinutes += minutesPerHour;
+      }
+    });
+  });
+
+  let maxBusyScore = 0;
+  const cells: TurnoverHeatmapCell[] = [];
+
+  tableTypes.forEach((tableType) => {
+    hours.forEach((hour) => {
+      const key = `${tableType}-${hour}`;
+      const entry = heatmapMap.get(key)!;
+      const busyScore = entry.openCount * 60 + entry.totalMinutes;
+      maxBusyScore = Math.max(maxBusyScore, busyScore);
+      cells.push({
+        tableType,
+        hour,
+        openCount: Math.round(entry.openCount * 10) / 10,
+        totalMinutes: Math.round(entry.totalMinutes),
+        busyScore,
+      });
+    });
+  });
+
+  cells.forEach((cell) => {
+    cell.busyScore = maxBusyScore > 0 ? (cell.busyScore / maxBusyScore) * 100 : 0;
+  });
+
+  return { hours, tableTypes, cells };
 };
 
 export { levelColorMap };
