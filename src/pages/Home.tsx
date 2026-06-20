@@ -133,7 +133,10 @@ export default function Home() {
       totalRevenue: calculateChangeRate(kpis.totalRevenue, previousKpis.totalRevenue),
       totalOrders: calculateChangeRate(kpis.totalOrders, previousKpis.totalOrders),
       avgSpend: calculateChangeRate(kpis.avgSpend, previousKpis.avgSpend),
-      avgTurnover: calculateChangeRate(kpis.avgTurnover, previousKpis.avgTurnover),
+      avgTurnover:
+        kpis.avgTurnover === 0
+          ? null
+          : calculateChangeRate(kpis.avgTurnover, previousKpis.avgTurnover),
       memberRate: calculateChangeRate(kpis.memberRate, previousKpis.memberRate),
       totalTips: calculateChangeRate(kpis.totalTips, previousKpis.totalTips),
     }),

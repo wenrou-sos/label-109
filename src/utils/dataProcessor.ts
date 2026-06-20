@@ -618,8 +618,8 @@ export const getPreviousPeriod = (range: DateRange): DateRange => {
 export const calculateChangeRate = (
   current: number,
   previous: number
-): number => {
-  if (previous === 0) return 0;
+): number | null => {
+  if (previous === 0) return null;
   return ((current - previous) / previous) * 100;
 };
 

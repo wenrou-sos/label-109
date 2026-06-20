@@ -9,12 +9,12 @@ interface KPICardsProps {
   memberRate: number;
   totalTips: number;
   changeRates: {
-    totalRevenue: number;
-    totalOrders: number;
-    avgSpend: number;
-    avgTurnover: number;
-    memberRate: number;
-    totalTips: number;
+    totalRevenue: number | null;
+    totalOrders: number | null;
+    avgSpend: number | null;
+    avgTurnover: number | null;
+    memberRate: number | null;
+    totalTips: number | null;
   };
 }
 
@@ -36,10 +36,10 @@ const KPIItem: React.FC<{
   label: string;
   value: string;
   sub?: string;
-  changeRate?: number;
+  changeRate?: number | null;
   delay: number;
 }> = ({ icon, label, value, sub, changeRate, delay }) => {
-  const change = changeRate !== undefined ? formatChangeRate(changeRate) : null;
+  const change = changeRate !== undefined && changeRate !== null ? formatChangeRate(changeRate) : null;
   return (
     <div
       className="card animate-slide-up"
