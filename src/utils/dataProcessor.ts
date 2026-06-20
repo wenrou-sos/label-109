@@ -14,7 +14,7 @@ import type {
   SearchResultItem,
 } from '../types';
 
-const isInDateRange = (datetimeStr: string, range: DateRange): boolean => {
+export const isInDateRange = (datetimeStr: string, range: DateRange): boolean => {
   if (!range.start || !range.end) return true;
   const date = datetimeStr.split(' ')[0];
   return date >= range.start && date <= range.end;
@@ -960,49 +960,60 @@ export const generateDrilldownData = (
 
 export const searchData = (
   data: BarData,
-  keyword: string
+  keyword: string,
+  range: DateRange
 ): SearchResultItem[] => {
   if (!keyword.trim()) return [];
   const kw = keyword.trim().toLowerCase();
   const results: SearchResultItem[] = [];
 
+  const filteredSales = data.salesRecords.filter((s) =>
+    isInDateRange(s.sale_time, range)
+  );
+  const filteredTables = data.tableUsages.filter((t) =>
+    isInDateRange(t.open_time, range)
+  );
+
+  const activeItemIds = new Set(filteredSales.map((s) => s.item_id));
+  const activeCustomerIds = new Set(filteredSales.map((s) => s.customer_id));
+  const activeTableIds = new Set(filteredTables.map((t) => t.table_id));
+
   data.menuItems.forEach((item) => {
-    if (item.name.toLowerCase().includes(kw)) {
+    if (activeItemIds.has(item.item_id) && item.name.toLowerCase().includes(kw)) {
       results.push({
         id: item.item_id,
         name: item.name,
         category: 'drink',
         sectionId: 'section-sales-ranking',
         matchedText: item.name,
+        itemId: item.item_id,
       });
     }
   });
 
   data.customers.forEach((c) => {
-    if (c.name.toLowerCase().includes(kw)) {
+    if (activeCustomerIds.has(c.customer_id) && c.name.toLowerCase().includes(kw)) {
       results.push({
         id: c.customer_id,
         name: c.name,
         category: 'customer',
         sectionId: 'section-customer-structure',
         matchedText: c.name,
+        customerId: c.customer_id,
       });
     }
   });
 
-  const tableIds = new Set<string>();
-  data.tableUsages.forEach((t) => {
-    if (!tableIds.has(t.table_id)) {
-      tableIds.add(t.table_id);
-      if (t.table_id.toLowerCase().includes(kw)) {
-        results.push({
-          id: t.table_id,
-          name: t.table_id,
-          category: 'table',
-          sectionId: 'section-turnover',
-          matchedText: t.table_id,
-        });
-      }
+  activeTableIds.forEach((tableId) => {
+    if (tableId.toLowerCase().includes(kw)) {
+      results.push({
+        id: tableId,
+        name: tableId,
+        category: 'table',
+        sectionId: 'section-turnover',
+        matchedText: tableId,
+        tableId: tableId,
+      });
     }
   });
 

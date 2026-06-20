@@ -158,6 +158,9 @@ export interface SearchResultItem {
   category: SearchTargetCategory;
   sectionId: string;
   matchedText: string;
+  itemId?: string;
+  tableId?: string;
+  customerId?: string;
 }
 
 export type DrilldownSource =

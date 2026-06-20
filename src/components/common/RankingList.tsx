@@ -7,6 +7,7 @@ export interface RankingItemData {
   sub?: string;
   avatar?: string;
   unit?: string;
+  id?: string;
 }
 
 interface RankingListProps {
@@ -14,6 +15,7 @@ interface RankingListProps {
   valueFormatter?: (v: number) => string;
   maxValue?: number;
   showProgress?: boolean;
+  highlightId?: string;
 }
 
 const getRankClass = (rank: number) => {
@@ -30,6 +32,7 @@ const RankingList: React.FC<RankingListProps> = ({
   valueFormatter = defaultFormatter,
   maxValue,
   showProgress = false,
+  highlightId,
 }) => {
   const max =
     maxValue || items.reduce((m, it) => Math.max(m, it.value), 0) || 1;
@@ -37,7 +40,12 @@ const RankingList: React.FC<RankingListProps> = ({
   return (
     <div className="space-y-1 max-h-[360px] overflow-y-auto pr-1">
       {items.map((item) => (
-        <div key={item.rank} className="rank-item">
+        <div
+          key={item.rank}
+          className={`rank-item ${
+            highlightId && item.id === highlightId ? 'rank-item-highlight' : ''
+          }`}
+        >
           <span className={`rank-number ${getRankClass(item.rank)}`}>
             {item.rank}
           </span>

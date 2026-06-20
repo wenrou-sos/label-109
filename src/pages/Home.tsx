@@ -16,6 +16,7 @@ import {
   getPreviousPeriod,
   calculateChangeRate,
   searchData,
+  isInDateRange,
 } from '../utils/dataProcessor';
 import { exportAllReports } from '../utils/exportData';
 import type { DrilldownSource, DrilldownData, SearchResultItem } from '../types';
@@ -45,27 +46,83 @@ export default function Home() {
   } | null>(null);
   const [searchKeyword, setSearchKeyword] = useState('');
   const [highlightSectionId, setHighlightSectionId] = useState<string | null>(null);
+  const [turnoverActiveTab, setTurnoverActiveTab] = useState<'bar' | 'scatter'>('bar');
+  const [highlightTableId, setHighlightTableId] = useState<string | null>(null);
+  const [highlightDrinkId, setHighlightDrinkId] = useState<string | null>(null);
+  const [searchDrilldown, setSearchDrilldown] = useState<DrilldownData | null>(null);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
 
   const searchResults = useMemo(
-    () => searchData(data, searchKeyword),
-    [data, searchKeyword]
+    () => searchData(data, searchKeyword, dateRange),
+    [data, searchKeyword, dateRange]
   );
 
   const handleSearch = (keyword: string) => {
     setSearchKeyword(keyword);
+    if (!keyword.trim()) {
+      setSearchDrilldown(null);
+    }
   };
 
   const handleSelectSearchResult = (item: SearchResultItem) => {
     setHighlightSectionId(item.sectionId);
     setTimeout(() => setHighlightSectionId(null), 2500);
-    const el = document.getElementById(item.sectionId);
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    if (item.category === 'drink' && item.itemId) {
+      setHighlightDrinkId(item.itemId);
+      setTimeout(() => setHighlightDrinkId(null), 3000);
+      const source: DrilldownSource = { type: 'salesItem', itemId: item.itemId, itemName: item.name };
+      setActiveDrilldown({ section: 'sales', source });
+    } else if (item.category === 'table' && item.tableId) {
+      setTurnoverActiveTab('scatter');
+      setHighlightTableId(item.tableId);
+      setTimeout(() => setHighlightTableId(null), 3000);
+      const tableType = tableTurnover.find(t => t.table_id === item.tableId)?.table_type || '';
+      const source: DrilldownSource = { type: 'tableId', tableId: item.tableId, tableType };
+      setActiveDrilldown({ section: 'turnover', source });
+    } else if (item.category === 'customer' && item.customerId) {
+      const customer = data.customers.find(c => c.customer_id === item.customerId);
+      if (customer) {
+        const customerSales = data.salesRecords.filter(
+          s => s.customer_id === item.customerId && isInDateRange(s.sale_time, dateRange)
+        );
+        const totalSpent = customerSales.reduce((sum, s) => sum + s.unit_price * s.quantity, 0);
+        const visitCount = new Set(customerSales.map(s => s.sale_time.split('T')[0])).size;
+        const ageGroup = customer.age < 25 ? '18-24岁' : customer.age < 35 ? '25-34岁' : customer.age < 45 ? '35-44岁' : '45岁以上';
+        const searchDrillData: DrilldownData = {
+          title: `客户搜索结果：${customer.name}`,
+          subtitle: '客户基本信息与消费概览',
+          columns: [
+            { key: 'field', title: '项目', width: 120 },
+            { key: 'value', title: '信息', width: 200 },
+          ],
+          rows: [
+            { field: '客户ID', value: customer.customer_id },
+            { field: '姓名', value: customer.name },
+            { field: '性别', value: customer.gender },
+            { field: '年龄', value: customer.age + ' 岁' },
+            { field: '年龄段', value: ageGroup },
+            { field: '会员等级', value: customer.membership_level },
+            { field: '累计到店', value: customer.total_visits + ' 次' },
+            { field: '累计消费', value: formatCurrency(customer.total_spent) },
+            { field: '本期消费次数', value: visitCount + ' 次' },
+            { field: '本期消费总额', value: formatCurrency(totalSpent) },
+          ],
+        };
+        setSearchDrilldown(searchDrillData);
+        setActiveDrilldown(null);
+      }
     }
+
+    setTimeout(() => {
+      const el = document.getElementById(item.sectionId);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 50);
   };
 
   const getHighlightClass = (sectionId: string) =>
@@ -173,6 +230,7 @@ export default function Home() {
     value: s.quantity,
     unit: s.unit,
     sub: `${s.category} · 营收 ${formatCurrency(s.revenue)}`,
+    id: s.item_id,
   }));
 
   const profitRankItems: RankingItemData[] = profitRanking.map((s) => ({
@@ -361,6 +419,9 @@ export default function Home() {
               byType={turnoverByType}
               tableData={tableTurnover}
               onDrilldown={handleDrilldown('turnover')}
+              activeTab={turnoverActiveTab}
+              onTabChange={setTurnoverActiveTab}
+              highlightTableId={highlightTableId}
             />
             {activeDrilldown?.section === 'turnover' && (
               <DrilldownPanel data={drilldownData} onClose={closeDrilldown} />
@@ -378,6 +439,7 @@ export default function Home() {
               items={salesRankItems}
               valueFormatter={formatQuantity}
               showProgress
+              highlightId={highlightDrinkId || undefined}
             />
           </div>
         </section>
@@ -394,7 +456,10 @@ export default function Home() {
               </div>
             </div>
             <CustomerStructureChart data={customerStructure} onDrilldown={handleDrilldown('customer')} />
-            {activeDrilldown?.section === 'customer' && (
+            {searchDrilldown && (
+              <DrilldownPanel data={searchDrilldown} onClose={() => setSearchDrilldown(null)} />
+            )}
+            {activeDrilldown?.section === 'customer' && !searchDrilldown && (
               <DrilldownPanel data={drilldownData} onClose={closeDrilldown} />
             )}
           </div>

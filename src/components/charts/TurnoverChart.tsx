@@ -7,6 +7,9 @@ interface TurnoverChartProps {
   byType: TurnoverByType[];
   tableData: TableTurnover[];
   onDrilldown?: (source: DrilldownSource) => void;
+  activeTab?: 'bar' | 'scatter';
+  onTabChange?: (tab: 'bar' | 'scatter') => void;
+  highlightTableId?: string;
 }
 
 const WINE = '#722F37';
@@ -20,8 +23,24 @@ const typeColorMap: Record<string, string> = {
   包间: '#9B6B3F',
 };
 
-const TurnoverChart: React.FC<TurnoverChartProps> = ({ byType, tableData, onDrilldown }) => {
-  const [activeTab, setActiveTab] = useState<'bar' | 'scatter'>('bar');
+const TurnoverChart: React.FC<TurnoverChartProps> = ({
+  byType,
+  tableData,
+  onDrilldown,
+  activeTab: externalActiveTab,
+  onTabChange,
+  highlightTableId,
+}) => {
+  const [internalActiveTab, setInternalActiveTab] = useState<'bar' | 'scatter'>('bar');
+  const activeTab = externalActiveTab ?? internalActiveTab;
+
+  const handleTabChange = (tab: 'bar' | 'scatter') => {
+    if (onTabChange) {
+      onTabChange(tab);
+    } else {
+      setInternalActiveTab(tab);
+    }
+  };
 
   const barOnEvents = onDrilldown
     ? {
@@ -37,10 +56,11 @@ const TurnoverChart: React.FC<TurnoverChartProps> = ({ byType, tableData, onDril
   const scatterOnEvents = onDrilldown
     ? {
         click: (params: unknown) => {
-          const p = params as { data: number[] };
-          if (p.data && p.data.length >= 4) {
-            const tableId = String(p.data[2]);
-            const tableType = String(p.data[3]);
+          const p = params as { data: { value: number[] } | number[]; value: number[] };
+          const dataArr = p.value || (Array.isArray(p.data) ? p.data : p.data?.value);
+          if (dataArr && dataArr.length >= 4) {
+            const tableId = String(dataArr[2]);
+            const tableType = String(dataArr[3]);
             onDrilldown({ type: 'tableId', tableId, tableType });
           }
         },
@@ -130,30 +150,41 @@ const TurnoverChart: React.FC<TurnoverChartProps> = ({ byType, tableData, onDril
 
   const scatterOption: EChartsOption = useMemo(() => {
     const types = Array.from(new Set(tableData.map(d => d.table_type)));
-    const series = types.map(type => ({
-      name: type,
-      type: 'scatter' as const,
-      symbolSize: 16,
-      itemStyle: {
-        color: typeColorMap[type] || GOLD,
-        opacity: 0.85,
-        borderColor: TEXT,
-        borderWidth: 1,
-      },
-      emphasis: onDrilldown
-        ? {
-            itemStyle: {
-              opacity: 1,
-              borderWidth: 3,
-              shadowColor: 'rgba(201, 169, 98, 0.5)',
-              shadowBlur: 15,
-            },
-          }
-        : undefined,
-      data: tableData
-        .filter(d => d.table_type === type)
-        .map(d => [d.turnCount, d.totalRevenue, d.table_id, d.table_type, d.avgStayMinutes]),
-    }));
+    const series = types.map(type => {
+      const typeData = tableData.filter(d => d.table_type === type);
+      const dataWithStyle = typeData.map(d => {
+        const isHighlighted = highlightTableId && d.table_id === highlightTableId;
+        return {
+          value: [d.turnCount, d.totalRevenue, d.table_id, d.table_type, d.avgStayMinutes],
+          symbolSize: isHighlighted ? 28 : 16,
+          itemStyle: {
+            color: isHighlighted ? '#F5E4B0' : typeColorMap[type] || GOLD,
+            borderColor: isHighlighted ? '#C9A962' : TEXT,
+            borderWidth: isHighlighted ? 3 : 1,
+            shadowBlur: isHighlighted ? 20 : 0,
+            shadowColor: 'rgba(201, 169, 98, 0.8)',
+          },
+        };
+      });
+      return {
+        name: type,
+        type: 'scatter' as const,
+        data: dataWithStyle,
+        itemStyle: {
+          opacity: 0.85,
+        },
+        emphasis: onDrilldown
+          ? {
+              itemStyle: {
+                opacity: 1,
+                borderWidth: 3,
+                shadowColor: 'rgba(201, 169, 98, 0.5)',
+                shadowBlur: 15,
+              },
+            }
+          : undefined,
+      };
+    });
 
     return {
       backgroundColor: 'transparent',
@@ -164,12 +195,15 @@ const TurnoverChart: React.FC<TurnoverChartProps> = ({ byType, tableData, onDril
         borderColor: GOLD,
         textStyle: { color: TEXT },
         formatter: (params: any) => {
-          const [, , tableId, tableType, avgStay] = params.data;
+          const val = params.value || params.data?.value || [];
+          const tableId = val[2];
+          const tableType = val[3];
+          const avgStay = val[4];
           let html = `
             <div style="font-weight:600;color:${GOLD};margin-bottom:6px;">桌号 ${tableId}</div>
             <div>类型：${tableType}</div>
-            <div>翻台次数：${params.value[0]} 次</div>
-            <div>营收：¥${params.value[1].toLocaleString('zh-CN')}</div>
+            <div>翻台次数：${val[0]} 次</div>
+            <div>营收：¥${Number(val[1]).toLocaleString('zh-CN')}</div>
             <div>平均停留：${avgStay} 分钟</div>
           `;
           if (onDrilldown) {
@@ -211,13 +245,13 @@ const TurnoverChart: React.FC<TurnoverChartProps> = ({ byType, tableData, onDril
       },
       series,
     };
-  }, [tableData, onDrilldown]);
+  }, [tableData, onDrilldown, highlightTableId]);
 
   return (
     <div>
       <div className="flex gap-1 mb-2">
         <button
-          onClick={() => setActiveTab('bar')}
+          onClick={() => handleTabChange('bar')}
           className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${
             activeTab === 'bar'
               ? 'bg-wine-700 text-ivory-200 border border-wine-600'
@@ -227,7 +261,7 @@ const TurnoverChart: React.FC<TurnoverChartProps> = ({ byType, tableData, onDril
           桌型对比
         </button>
         <button
-          onClick={() => setActiveTab('scatter')}
+          onClick={() => handleTabChange('scatter')}
           className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${
             activeTab === 'scatter'
               ? 'bg-wine-700 text-ivory-200 border border-wine-600'
