@@ -154,27 +154,25 @@ export const exportAllReports = (data: BarData, range: DateRange) => {
   ];
   exportToCSV(customerExport, `客户结构分析_${dateRangeStr}_${timestamp}.csv`);
 
-  const ageExport = demographics.ageDistribution.map((a) => ({
-    年龄段: a.ageGroup,
-    总人数: a.count.toString(),
+  const ageExport = demographics.ageGenderDistribution.map((a) => ({
+    年龄段: a.group,
+    总人数: a.total.toString(),
     男性: a.male.toString(),
     女性: a.female.toString(),
-    男性占比: a.count > 0 ? `${((a.male / a.count) * 100).toFixed(1)}%` : '0%',
-    女性占比: a.count > 0 ? `${((a.female / a.count) * 100).toFixed(1)}%` : '0%',
+    男性占比: a.total > 0 ? `${((a.male / a.total) * 100).toFixed(1)}%` : '0%',
+    女性占比: a.total > 0 ? `${((a.female / a.total) * 100).toFixed(1)}%` : '0%',
   }));
   exportToCSV(ageExport, `年龄性别分布_${dateRangeStr}_${timestamp}.csv`);
 
   const youngPrefExport = demographics.youngPreferences.map((p) => ({
     年龄段: '18-34岁',
     品类: p.category,
-    消费数量: p.count.toString(),
-    占比: `${p.share.toFixed(1)}%`,
+    消费数量: p.value.toString(),
   }));
   const maturePrefExport = demographics.maturePreferences.map((p) => ({
     年龄段: '35岁以上',
     品类: p.category,
-    消费数量: p.count.toString(),
-    占比: `${p.share.toFixed(1)}%`,
+    消费数量: p.value.toString(),
   }));
   exportToCSV(
     [...youngPrefExport, ...maturePrefExport],

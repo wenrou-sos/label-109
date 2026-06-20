@@ -12,11 +12,16 @@ import {
   calculateDemographics,
   calculateEmployeePerformance,
   calculateKPIs,
+  generateDrilldownData,
+  getPreviousPeriod,
+  calculateChangeRate,
 } from '../utils/dataProcessor';
 import { exportAllReports } from '../utils/exportData';
+import type { DrilldownSource, DrilldownData } from '../types';
 import KPICards from '../components/common/KPICards';
 import Header from '../components/common/Header';
 import RankingList, { RankingItemData } from '../components/common/RankingList';
+import DrilldownPanel from '../components/common/DrilldownPanel';
 import TimeAnalysisChart from '../components/charts/TimeAnalysisChart';
 import SalesRankingChart from '../components/charts/SalesRankingChart';
 import TurnoverChart from '../components/charts/TurnoverChart';
@@ -46,6 +51,29 @@ export default function Home() {
     setToast({ show: true, type, message });
     setTimeout(() => setToast(null), 4000);
   };
+
+  const [activeDrilldown, setActiveDrilldown] = useState<{
+    section: string;
+    source: DrilldownSource;
+  } | null>(null);
+
+  const drilldownData: DrilldownData | null = useMemo(() => {
+    if (!activeDrilldown) return null;
+    return generateDrilldownData(data, dateRange, activeDrilldown.source);
+  }, [activeDrilldown, data, dateRange]);
+
+  const handleDrilldown = (section: string) => (source: DrilldownSource) => {
+    if (!source) return;
+    const isSameSection = activeDrilldown?.section === section;
+    const isSameSource = JSON.stringify(activeDrilldown?.source) === JSON.stringify(source);
+    if (isSameSection && isSameSource) {
+      setActiveDrilldown(null);
+    } else {
+      setActiveDrilldown({ section, source });
+    }
+  };
+
+  const closeDrilldown = () => setActiveDrilldown(null);
 
   const hourlyData = useMemo(
     () => calculateHourlyData(data, dateRange),
@@ -93,6 +121,24 @@ export default function Home() {
   );
 
   const kpis = useMemo(() => calculateKPIs(data, dateRange), [data, dateRange]);
+
+  const previousPeriod = useMemo(() => getPreviousPeriod(dateRange), [dateRange]);
+  const previousKpis = useMemo(
+    () => calculateKPIs(data, previousPeriod),
+    [data, previousPeriod]
+  );
+
+  const changeRates = useMemo(
+    () => ({
+      totalRevenue: calculateChangeRate(kpis.totalRevenue, previousKpis.totalRevenue),
+      totalOrders: calculateChangeRate(kpis.totalOrders, previousKpis.totalOrders),
+      avgSpend: calculateChangeRate(kpis.avgSpend, previousKpis.avgSpend),
+      avgTurnover: calculateChangeRate(kpis.avgTurnover, previousKpis.avgTurnover),
+      memberRate: calculateChangeRate(kpis.memberRate, previousKpis.memberRate),
+      totalTips: calculateChangeRate(kpis.totalTips, previousKpis.totalTips),
+    }),
+    [kpis, previousKpis]
+  );
 
   const salesRankItems: RankingItemData[] = salesRanking.slice(0, 10).map((s) => ({
     rank: s.rank,
@@ -206,16 +252,20 @@ export default function Home() {
           avgTurnover={kpis.avgTurnover}
           memberRate={kpis.memberRate}
           totalTips={kpis.totalTips}
+          changeRates={changeRates}
         />
 
         <section className="card animate-fade-in">
           <div className="card-header">
             <div>
               <h2 className="card-title">时段经营分析</h2>
-              <p className="card-subtitle">21:00 - 02:00 各时段营收与运营效率</p>
+              <p className="card-subtitle">21:00 - 02:00 各时段营收与运营效率 · 点击图表下钻查看明细</p>
             </div>
           </div>
-          <TimeAnalysisChart data={hourlyData} />
+          <TimeAnalysisChart data={hourlyData} onDrilldown={handleDrilldown('hourly')} />
+          {activeDrilldown?.section === 'hourly' && (
+            <DrilldownPanel data={drilldownData} onClose={closeDrilldown} />
+          )}
         </section>
 
         <section className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -223,10 +273,13 @@ export default function Home() {
             <div className="card-header">
               <div>
                 <h2 className="card-title">酒水单品销量 TOP20</h2>
-                <p className="card-subtitle">按销售数量排序，区分杯售/瓶售</p>
+                <p className="card-subtitle">按销售数量排序 · 点击图表下钻查看单品明细</p>
               </div>
             </div>
-            <SalesRankingChart data={salesRanking} />
+            <SalesRankingChart data={salesRanking} onDrilldown={handleDrilldown('sales')} />
+            {activeDrilldown?.section === 'sales' && (
+              <DrilldownPanel data={drilldownData} onClose={closeDrilldown} />
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -265,10 +318,17 @@ export default function Home() {
             <div className="card-header">
               <div>
                 <h2 className="card-title">翻台率分析</h2>
-                <p className="card-subtitle">桌型对比与效率营收关联</p>
+                <p className="card-subtitle">桌型对比与效率营收关联 · 点击图表下钻查看明细</p>
               </div>
             </div>
-            <TurnoverChart byType={turnoverByType} tableData={tableTurnover} />
+            <TurnoverChart
+              byType={turnoverByType}
+              tableData={tableTurnover}
+              onDrilldown={handleDrilldown('turnover')}
+            />
+            {activeDrilldown?.section === 'turnover' && (
+              <DrilldownPanel data={drilldownData} onClose={closeDrilldown} />
+            )}
           </div>
 
           <div className="card animate-slide-up" style={{ animationDelay: '50ms' }}>
@@ -291,20 +351,26 @@ export default function Home() {
             <div className="card-header">
               <div>
                 <h2 className="card-title">客户结构分析</h2>
-                <p className="card-subtitle">新老客户占比与消费频次</p>
+                <p className="card-subtitle">新老客户占比与消费频次 · 点击图表下钻查看明细</p>
               </div>
             </div>
-            <CustomerStructureChart data={customerStructure} />
+            <CustomerStructureChart data={customerStructure} onDrilldown={handleDrilldown('customer')} />
+            {activeDrilldown?.section === 'customer' && (
+              <DrilldownPanel data={drilldownData} onClose={closeDrilldown} />
+            )}
           </div>
 
           <div className="card animate-slide-up" style={{ animationDelay: '50ms' }}>
             <div className="card-header">
               <div>
                 <h2 className="card-title">客群画像</h2>
-                <p className="card-subtitle">年龄性别分布与酒水偏好</p>
+                <p className="card-subtitle">年龄性别分布与酒水偏好 · 点击图表下钻查看明细</p>
               </div>
             </div>
-            <DemographicsChart data={demographics} />
+            <DemographicsChart data={demographics} onDrilldown={handleDrilldown('demographics')} />
+            {activeDrilldown?.section === 'demographics' && (
+              <DrilldownPanel data={drilldownData} onClose={closeDrilldown} />
+            )}
           </div>
         </section>
 

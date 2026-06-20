@@ -106,6 +106,8 @@ export interface CustomerStructure {
   returningCustomers: number;
   newShare: number;
   returningShare: number;
+  newCustomerTotalSpend: number;
+  returningCustomerTotalSpend: number;
   visitFrequency: { range: string; count: number; share: number }[];
 }
 
@@ -117,10 +119,10 @@ export interface AgeGroupPreference {
 }
 
 export interface DemographicData {
-  ageDistribution: { ageGroup: string; count: number; male: number; female: number }[];
+  ageGenderDistribution: { group: string; male: number; female: number; total: number }[];
   genderRatio: { male: number; female: number; maleShare: number; femaleShare: number };
-  youngPreferences: AgeGroupPreference[];
-  maturePreferences: AgeGroupPreference[];
+  youngPreferences: { category: string; value: number }[];
+  maturePreferences: { category: string; value: number }[];
 }
 
 export interface EmployeePerformance {
@@ -132,3 +134,29 @@ export interface EmployeePerformance {
   salesAmount?: number;
   tipAmount?: number;
 }
+
+export interface DrilldownColumn {
+  key: string;
+  title: string;
+  width?: number;
+  align?: 'left' | 'center' | 'right';
+  formatter?: (value: unknown, row: Record<string, unknown>) => string;
+}
+
+export interface DrilldownData {
+  title: string;
+  subtitle?: string;
+  columns: DrilldownColumn[];
+  rows: Record<string, unknown>[];
+}
+
+export type DrilldownSource =
+  | { type: 'hourly'; hour: string }
+  | { type: 'salesItem'; itemId: string; itemName: string }
+  | { type: 'tableType'; tableType: string }
+  | { type: 'tableId'; tableId: string; tableType: string }
+  | { type: 'customerType'; customerType: 'new' | 'returning' }
+  | { type: 'visitFrequency'; range: string }
+  | { type: 'ageGroup'; ageGroup: string; gender?: string }
+  | { type: 'preferenceCategory'; ageGroup: string; category: string }
+  | null;

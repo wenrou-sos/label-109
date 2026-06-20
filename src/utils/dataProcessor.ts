@@ -8,6 +8,9 @@ import type {
   DemographicData,
   EmployeePerformance,
   DateRange,
+  DrilldownSource,
+  DrilldownData,
+  DrilldownColumn,
 } from '../types';
 
 const isInDateRange = (datetimeStr: string, range: DateRange): boolean => {
@@ -356,14 +359,20 @@ export const calculateCustomerStructure = (
 
   let newCustomers = 0;
   let returningCustomers = 0;
+  let newCustomerTotalSpend = 0;
+  let returningCustomerTotalSpend = 0;
 
   activeCustomerIds.forEach((cid) => {
     const customer = data.customers.find((c) => c.customer_id === cid);
     if (customer) {
+      const custSales = filteredSales.filter((s) => s.customer_id === cid);
+      const custTotal = custSales.reduce((sum, s) => sum + s.total_amount, 0);
       if (customer.total_visits <= 1) {
         newCustomers++;
+        newCustomerTotalSpend += custTotal;
       } else {
         returningCustomers++;
+        returningCustomerTotalSpend += custTotal;
       }
     }
   });
@@ -398,6 +407,8 @@ export const calculateCustomerStructure = (
     newShare: totalActive > 0 ? (newCustomers / totalActive) * 100 : 0,
     returningShare:
       totalActive > 0 ? (returningCustomers / totalActive) * 100 : 0,
+    newCustomerTotalSpend,
+    returningCustomerTotalSpend,
     visitFrequency,
   };
 };
@@ -422,15 +433,17 @@ export const calculateDemographics = (
     { label: '45岁以上', min: 45, max: 99 },
   ];
 
-  const ageDistribution = ageGroups.map((g) => {
+  const ageGenderDistribution = ageGroups.map((g) => {
     const group = activeCustomers.filter(
       (c) => c.age >= g.min && c.age <= g.max
     );
+    const male = group.filter((c) => c.gender === '男').length;
+    const female = group.filter((c) => c.gender === '女').length;
     return {
-      ageGroup: g.label,
-      count: group.length,
-      male: group.filter((c) => c.gender === '男').length,
-      female: group.filter((c) => c.gender === '女').length,
+      group: g.label,
+      male,
+      female,
+      total: group.length,
     };
   });
 
@@ -456,33 +469,24 @@ export const calculateDemographics = (
       }
     });
 
-    const total = Array.from(categoryMap.values()).reduce((a, b) => a + b, 0);
-    const result = Array.from(categoryMap.entries()).map(([category, count]) => ({
-      ageGroup: '',
+    const result = Array.from(categoryMap.entries()).map(([category, value]) => ({
       category,
-      count,
-      share: total > 0 ? (count / total) * 100 : 0,
+      value,
     }));
 
-    return result.sort((a, b) => b.count - a.count);
+    return result.sort((a, b) => b.value - a.value);
   };
 
   return {
-    ageDistribution,
+    ageGenderDistribution,
     genderRatio: {
       male,
       female,
       maleShare: total > 0 ? (male / total) * 100 : 0,
       femaleShare: total > 0 ? (female / total) * 100 : 0,
     },
-    youngPreferences: calcPreferences(youngCustomers).map((p) => ({
-      ...p,
-      ageGroup: '18-34岁',
-    })),
-    maturePreferences: calcPreferences(matureCustomers).map((p) => ({
-      ...p,
-      ageGroup: '35岁以上',
-    })),
+    youngPreferences: calcPreferences(youngCustomers),
+    maturePreferences: calcPreferences(matureCustomers),
   };
 };
 
@@ -595,4 +599,360 @@ export const calculateKPIs = (
     memberRate,
     totalTips,
   };
+};
+
+export const getPreviousPeriod = (range: DateRange): DateRange => {
+  if (!range.start || !range.end) return { start: '', end: '' };
+  const start = new Date(range.start);
+  const end = new Date(range.end);
+  const days = Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+  const prevEnd = new Date(start.getTime() - 24 * 60 * 60 * 1000);
+  const prevStart = new Date(prevEnd.getTime() - (days - 1) * 24 * 60 * 60 * 1000);
+  const formatDate = (d: Date) => d.toISOString().split('T')[0];
+  return {
+    start: formatDate(prevStart),
+    end: formatDate(prevEnd),
+  };
+};
+
+export const calculateChangeRate = (
+  current: number,
+  previous: number
+): number => {
+  if (previous === 0) return 0;
+  return ((current - previous) / previous) * 100;
+};
+
+const formatCurrency = (n: number) =>
+  '¥' + n.toLocaleString('zh-CN', { maximumFractionDigits: 0 });
+
+const getAgeGroup = (age: number): string => {
+  if (age < 25) return '18-24岁';
+  if (age < 35) return '25-34岁';
+  if (age < 45) return '35-44岁';
+  return '45岁以上';
+};
+
+const getVisitFrequencyRange = (visits: number): string => {
+  if (visits >= 2 && visits <= 3) return '2-3次';
+  if (visits >= 4 && visits <= 5) return '4-5次';
+  if (visits >= 6 && visits <= 10) return '6-10次';
+  return '10次以上';
+};
+
+export const generateDrilldownData = (
+  data: BarData,
+  range: DateRange,
+  source: DrilldownSource
+): DrilldownData | null => {
+  if (!source) return null;
+
+  const filteredSales = data.salesRecords.filter((s) =>
+    isInDateRange(s.sale_time, range)
+  );
+  const menuMap = new Map(data.menuItems.map((m) => [m.item_id, m]));
+  const customerMap = new Map(data.customers.map((c) => [c.customer_id, c]));
+  const tableMap = new Map(data.tableUsages.map((t) => [t.usage_id, t]));
+  const employeeMap = new Map(data.employees.map((e) => [e.employee_id, e]));
+
+  switch (source.type) {
+    case 'hourly': {
+      const targetHour = source.hour;
+      const hourlySales = filteredSales.filter((s) => {
+        const h = getHourFromTime(s.sale_time);
+        return h === targetHour;
+      });
+      const columns: DrilldownColumn[] = [
+        { key: 'time', title: '时间', width: 90 },
+        { key: 'item_name', title: '酒水名称', width: 180 },
+        { key: 'category', title: '品类', width: 80, align: 'center' },
+        { key: 'quantity', title: '数量', width: 70, align: 'right' },
+        { key: 'unit_price', title: '单价', width: 90, align: 'right' },
+        { key: 'total_amount', title: '金额', width: 100, align: 'right' },
+        { key: 'table_id', title: '桌号', width: 70, align: 'center' },
+        { key: 'waiter', title: '服务员', width: 80, align: 'center' },
+      ];
+      const rows = hourlySales
+        .sort((a, b) => a.sale_time.localeCompare(b.sale_time))
+        .map((s) => {
+          const item = menuMap.get(s.item_id);
+          const waiter = employeeMap.get(s.waiter_id);
+          return {
+            time: s.sale_time.split(' ')[1]?.substring(0, 5) || s.sale_time,
+            item_name: item?.name || s.item_id,
+            category: item?.category || '-',
+            quantity: s.quantity,
+            unit_price: s.unit_price,
+            total_amount: s.total_amount,
+            table_id: s.table_id,
+            waiter: waiter?.name || '-',
+          } as Record<string, unknown>;
+        });
+      return {
+        title: `${source.hour} 时段销售明细`,
+        subtitle: '点击图表中的时段可查看对应销售记录',
+        columns,
+        rows,
+      };
+    }
+
+    case 'salesItem': {
+      const itemSales = filteredSales.filter((s) => s.item_id === source.itemId);
+      const columns: DrilldownColumn[] = [
+        { key: 'sale_time', title: '销售时间', width: 150 },
+        { key: 'quantity', title: '数量', width: 70, align: 'right' },
+        { key: 'unit_price', title: '单价', width: 90, align: 'right' },
+        { key: 'total_amount', title: '金额', width: 100, align: 'right' },
+        { key: 'table_id', title: '桌号', width: 70, align: 'center' },
+        { key: 'customer', title: '客户', width: 100, align: 'center' },
+        { key: 'waiter', title: '服务员', width: 80, align: 'center' },
+        { key: 'bartender', title: '调酒师', width: 80, align: 'center' },
+      ];
+      const rows = itemSales
+        .sort((a, b) => a.sale_time.localeCompare(b.sale_time))
+        .map((s) => {
+          const customer = customerMap.get(s.customer_id);
+          const waiter = employeeMap.get(s.waiter_id);
+          const bartender = employeeMap.get(s.bartender_id);
+          return {
+            sale_time: s.sale_time,
+            quantity: s.quantity,
+            unit_price: s.unit_price,
+            total_amount: s.total_amount,
+            table_id: s.table_id,
+            customer: customer?.name || '-',
+            waiter: waiter?.name || '-',
+            bartender: bartender?.name || '-',
+          } as Record<string, unknown>;
+        });
+      return {
+        title: `${source.itemName} 销售明细`,
+        subtitle: '点击销量排行中的单品可查看所有销售记录',
+        columns,
+        rows,
+      };
+    }
+
+    case 'tableType': {
+      const filteredTables = data.tableUsages.filter((t) =>
+        isInDateRange(t.open_time, range) && t.table_type === source.tableType
+      );
+      const columns: DrilldownColumn[] = [
+        { key: 'table_id', title: '桌号', width: 80, align: 'center' },
+        { key: 'open_time', title: '开台时间', width: 150 },
+        { key: 'close_time', title: '结账时间', width: 150 },
+        { key: 'guest_count', title: '人数', width: 60, align: 'center' },
+        { key: 'total_consumption', title: '消费金额', width: 110, align: 'right' },
+        { key: 'customer', title: '客户', width: 100, align: 'center' },
+      ];
+      const rows = filteredTables
+        .sort((a, b) => a.open_time.localeCompare(b.open_time))
+        .map((t) => {
+          const customer = customerMap.get(t.customer_id);
+          return {
+            table_id: t.table_id,
+            open_time: t.open_time,
+            close_time: t.close_time,
+            guest_count: t.guest_count,
+            total_consumption: t.total_consumption,
+            customer: customer?.name || '-',
+          } as Record<string, unknown>;
+        });
+      return {
+        title: `${source.tableType} 桌台使用明细`,
+        subtitle: '点击桌型对比图中的类型可查看所有使用记录',
+        columns,
+        rows,
+      };
+    }
+
+    case 'tableId': {
+      const tableUsages = data.tableUsages.filter(
+        (t) => isInDateRange(t.open_time, range) && t.table_id === source.tableId
+      );
+      const columns: DrilldownColumn[] = [
+        { key: 'open_time', title: '开台时间', width: 150 },
+        { key: 'close_time', title: '结账时间', width: 150 },
+        { key: 'guest_count', title: '人数', width: 60, align: 'center' },
+        { key: 'total_consumption', title: '消费金额', width: 110, align: 'right' },
+        { key: 'customer', title: '客户', width: 100, align: 'center' },
+      ];
+      const rows = tableUsages
+        .sort((a, b) => a.open_time.localeCompare(b.open_time))
+        .map((t) => {
+          const customer = customerMap.get(t.customer_id);
+          return {
+            open_time: t.open_time,
+            close_time: t.close_time,
+            guest_count: t.guest_count,
+            total_consumption: t.total_consumption,
+            customer: customer?.name || '-',
+          } as Record<string, unknown>;
+        });
+      return {
+        title: `桌号 ${source.tableId} (${source.tableType}) 使用明细`,
+        subtitle: '点击效率散点图中的桌台可查看使用记录',
+        columns,
+        rows,
+      };
+    }
+
+    case 'customerType': {
+      const activeCustomerIds = new Set(
+        filteredSales.map((s) => s.customer_id).filter(Boolean)
+      );
+      const customers = data.customers.filter((c) => {
+        if (!activeCustomerIds.has(c.customer_id)) return false;
+        if (source.customerType === 'new') {
+          return c.total_visits === 1;
+        } else {
+          return c.total_visits >= 2;
+        }
+      });
+      const columns: DrilldownColumn[] = [
+        { key: 'customer_id', title: '客户ID', width: 100, align: 'center' },
+        { key: 'name', title: '姓名', width: 90, align: 'center' },
+        { key: 'age', title: '年龄', width: 60, align: 'center' },
+        { key: 'gender', title: '性别', width: 60, align: 'center' },
+        { key: 'membership_level', title: '会员等级', width: 90, align: 'center' },
+        { key: 'total_visits', title: '到店次数', width: 90, align: 'right' },
+        { key: 'total_spent', title: '累计消费', width: 110, align: 'right' },
+        { key: 'first_visit_date', title: '首次到店', width: 110, align: 'center' },
+      ];
+      const rows = customers.map((c) => ({
+        customer_id: c.customer_id,
+        name: c.name,
+        age: c.age,
+        gender: c.gender,
+        membership_level: c.membership_level,
+        total_visits: c.total_visits,
+        total_spent: c.total_spent,
+        first_visit_date: c.first_visit_date,
+      } as Record<string, unknown>));
+      return {
+        title: source.customerType === 'new' ? '新客户明细' : '回头客明细',
+        subtitle: '点击新老客户占比饼图可查看对应客户列表',
+        columns,
+        rows,
+      };
+    }
+
+    case 'visitFrequency': {
+      const activeCustomerIds = new Set(
+        filteredSales.map((s) => s.customer_id).filter(Boolean)
+      );
+      const customers = data.customers.filter((c) => {
+        if (!activeCustomerIds.has(c.customer_id)) return false;
+        if (c.total_visits < 2) return false;
+        return getVisitFrequencyRange(c.total_visits) === source.range;
+      });
+      const columns: DrilldownColumn[] = [
+        { key: 'customer_id', title: '客户ID', width: 100, align: 'center' },
+        { key: 'name', title: '姓名', width: 90, align: 'center' },
+        { key: 'age', title: '年龄', width: 60, align: 'center' },
+        { key: 'gender', title: '性别', width: 60, align: 'center' },
+        { key: 'membership_level', title: '会员等级', width: 90, align: 'center' },
+        { key: 'total_visits', title: '到店次数', width: 90, align: 'right' },
+        { key: 'total_spent', title: '累计消费', width: 110, align: 'right' },
+      ];
+      const rows = customers.map((c) => ({
+        customer_id: c.customer_id,
+        name: c.name,
+        age: c.age,
+        gender: c.gender,
+        membership_level: c.membership_level,
+        total_visits: c.total_visits,
+        total_spent: c.total_spent,
+      } as Record<string, unknown>));
+      return {
+        title: `消费频次 ${source.range} 客户明细`,
+        subtitle: '点击消费频次柱状图可查看对应客户列表',
+        columns,
+        rows,
+      };
+    }
+
+    case 'ageGroup': {
+      const activeCustomerIds = new Set(
+        filteredSales.map((s) => s.customer_id).filter(Boolean)
+      );
+      const customers = data.customers.filter((c) => {
+        if (!activeCustomerIds.has(c.customer_id)) return false;
+        if (getAgeGroup(c.age) !== source.ageGroup) return false;
+        if (source.gender && c.gender !== source.gender) return false;
+        return true;
+      });
+      const columns: DrilldownColumn[] = [
+        { key: 'customer_id', title: '客户ID', width: 100, align: 'center' },
+        { key: 'name', title: '姓名', width: 90, align: 'center' },
+        { key: 'age', title: '年龄', width: 60, align: 'center' },
+        { key: 'gender', title: '性别', width: 60, align: 'center' },
+        { key: 'membership_level', title: '会员等级', width: 90, align: 'center' },
+        { key: 'total_visits', title: '到店次数', width: 90, align: 'right' },
+        { key: 'total_spent', title: '累计消费', width: 110, align: 'right' },
+      ];
+      const rows = customers.map((c) => ({
+        customer_id: c.customer_id,
+        name: c.name,
+        age: c.age,
+        gender: c.gender,
+        membership_level: c.membership_level,
+        total_visits: c.total_visits,
+        total_spent: c.total_spent,
+      } as Record<string, unknown>));
+      const genderText = source.gender ? ` · ${source.gender}` : '';
+      return {
+        title: `${source.ageGroup}${genderText} 客户明细`,
+        subtitle: '点击年龄性别分布图可查看对应客群列表',
+        columns,
+        rows,
+      };
+    }
+
+    case 'preferenceCategory': {
+      const targetGroup = source.ageGroup;
+      const activeCustomerIds = new Set(
+        filteredSales.map((s) => s.customer_id).filter(Boolean)
+      );
+      const targetCustomerIds = new Set(
+        data.customers
+          .filter((c) => activeCustomerIds.has(c.customer_id) && getAgeGroup(c.age) === targetGroup)
+          .map((c) => c.customer_id)
+      );
+      const categorySales = filteredSales.filter((s) => {
+        if (!targetCustomerIds.has(s.customer_id)) return false;
+        const item = menuMap.get(s.item_id);
+        return item?.category === source.category;
+      });
+      const columns: DrilldownColumn[] = [
+        { key: 'sale_time', title: '销售时间', width: 150 },
+        { key: 'item_name', title: '酒水名称', width: 180 },
+        { key: 'quantity', title: '数量', width: 70, align: 'right' },
+        { key: 'total_amount', title: '金额', width: 100, align: 'right' },
+        { key: 'customer', title: '客户', width: 100, align: 'center' },
+      ];
+      const rows = categorySales
+        .sort((a, b) => a.sale_time.localeCompare(b.sale_time))
+        .map((s) => {
+          const item = menuMap.get(s.item_id);
+          const customer = customerMap.get(s.customer_id);
+          return {
+            sale_time: s.sale_time,
+            item_name: item?.name || s.item_id,
+            quantity: s.quantity,
+            total_amount: s.total_amount,
+            customer: customer?.name || '-',
+          } as Record<string, unknown>;
+        });
+      return {
+        title: `${targetGroup} · ${source.category} 消费明细`,
+        subtitle: '点击品类偏好饼图可查看对应品类销售记录',
+        columns,
+        rows,
+      };
+    }
+
+    default:
+      return null;
+  }
 };

@@ -1,13 +1,25 @@
-import React from 'react';
+﻿import React from 'react';
 import ReactECharts from 'echarts-for-react';
 import type { EChartsOption } from 'echarts';
-import type { HourlyData } from '../../types';
+import type { HourlyData, DrilldownSource } from '../../types';
 
 interface TimeAnalysisChartProps {
   data: HourlyData[];
+  onDrilldown?: (source: DrilldownSource) => void;
 }
 
-const TimeAnalysisChart: React.FC<TimeAnalysisChartProps> = ({ data }) => {
+const TimeAnalysisChart: React.FC<TimeAnalysisChartProps> = ({ data, onDrilldown }) => {
+  const onEvents = onDrilldown
+    ? {
+        click: (params: unknown) => {
+          const p = params as { name: string };
+          if (p.name) {
+            onDrilldown({ type: 'hourly', hour: p.name });
+          }
+        },
+      }
+    : undefined;
+
   const option: EChartsOption = {
     backgroundColor: 'transparent',
     animationDuration: 800,
@@ -42,6 +54,9 @@ const TimeAnalysisChart: React.FC<TimeAnalysisChartProps> = ({ data }) => {
             <span style="font-weight:600">${item.value.toFixed(1)}${unit}</span>
           </div>`;
         });
+        if (onDrilldown) {
+          html += `<div style="margin-top:8px;padding-top:6px;border-top:1px solid rgba(201,169,98,0.2);font-size:11px;color:#C9A962">💡 点击查看该时段明细</div>`;
+        }
         return html;
       },
     },
@@ -127,7 +142,7 @@ const TimeAnalysisChart: React.FC<TimeAnalysisChartProps> = ({ data }) => {
         data: data.map((d) => d.revenueShare),
         smooth: true,
         symbol: 'circle',
-        symbolSize: 6,
+        symbolSize: 8,
         lineStyle: {
           color: '#C9A962',
           width: 2,
@@ -158,7 +173,7 @@ const TimeAnalysisChart: React.FC<TimeAnalysisChartProps> = ({ data }) => {
         data: data.map((d) => d.avgSpend),
         smooth: true,
         symbol: 'circle',
-        symbolSize: 6,
+        symbolSize: 8,
         lineStyle: {
           color: '#D5979E',
           width: 2,
@@ -189,6 +204,25 @@ const TimeAnalysisChart: React.FC<TimeAnalysisChartProps> = ({ data }) => {
           },
           borderRadius: [4, 4, 0, 0],
         },
+        emphasis: onDrilldown
+          ? {
+              itemStyle: {
+                color: {
+                  type: 'linear',
+                  x: 0,
+                  y: 0,
+                  x2: 0,
+                  y2: 1,
+                  colorStops: [
+                    { offset: 0, color: '#8B3A42' },
+                    { offset: 1, color: 'rgba(139, 58, 66, 0.7)' },
+                  ],
+                },
+                shadowColor: 'rgba(201, 169, 98, 0.4)',
+                shadowBlur: 10,
+              },
+            }
+          : undefined,
       },
     ],
   };
@@ -198,6 +232,7 @@ const TimeAnalysisChart: React.FC<TimeAnalysisChartProps> = ({ data }) => {
       option={option}
       style={{ height: 320, width: '100%' }}
       opts={{ renderer: 'canvas' }}
+      onEvents={onEvents}
     />
   );
 };

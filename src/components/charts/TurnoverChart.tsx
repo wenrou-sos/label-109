@@ -1,11 +1,12 @@
-import React, { useMemo, useState } from 'react';
+﻿import React, { useMemo, useState } from 'react';
 import ReactECharts from 'echarts-for-react';
 import type { EChartsOption } from 'echarts';
-import type { TurnoverByType, TableTurnover } from '../../types';
+import type { TurnoverByType, TableTurnover, DrilldownSource } from '../../types';
 
 interface TurnoverChartProps {
   byType: TurnoverByType[];
   tableData: TableTurnover[];
+  onDrilldown?: (source: DrilldownSource) => void;
 }
 
 const WINE = '#722F37';
@@ -19,8 +20,32 @@ const typeColorMap: Record<string, string> = {
   包间: '#9B6B3F',
 };
 
-const TurnoverChart: React.FC<TurnoverChartProps> = ({ byType, tableData }) => {
+const TurnoverChart: React.FC<TurnoverChartProps> = ({ byType, tableData, onDrilldown }) => {
   const [activeTab, setActiveTab] = useState<'bar' | 'scatter'>('bar');
+
+  const barOnEvents = onDrilldown
+    ? {
+        click: (params: unknown) => {
+          const p = params as { name: string };
+          if (p.name) {
+            onDrilldown({ type: 'tableType', tableType: p.name });
+          }
+        },
+      }
+    : undefined;
+
+  const scatterOnEvents = onDrilldown
+    ? {
+        click: (params: unknown) => {
+          const p = params as { data: number[] };
+          if (p.data && p.data.length >= 4) {
+            const tableId = String(p.data[2]);
+            const tableType = String(p.data[3]);
+            onDrilldown({ type: 'tableId', tableId, tableType });
+          }
+        },
+      }
+    : undefined;
 
   const barOption: EChartsOption = useMemo(() => ({
     backgroundColor: 'transparent',
@@ -31,6 +56,16 @@ const TurnoverChart: React.FC<TurnoverChartProps> = ({ byType, tableData }) => {
       borderColor: GOLD,
       textStyle: { color: TEXT },
       axisPointer: { type: 'shadow', shadowStyle: { color: 'rgba(201,169,98,0.08)' } },
+      formatter: (params: any) => {
+        if (!params || !params.length) return '';
+        const p = params[0];
+        let html = `<div style="font-weight:600;color:${GOLD};margin-bottom:6px;">${p.name}</div>
+          <div>平均翻台：${p.value} 次</div>`;
+        if (onDrilldown) {
+          html += `<div style="margin-top:6px;padding-top:4px;border-top:1px solid rgba(201,169,98,0.2);font-size:11px;color:${GOLD}">💡 点击查看该桌型明细</div>`;
+        }
+        return html;
+      },
     },
     grid: { left: 50, right: 20, top: 30, bottom: 30 },
     xAxis: {
@@ -65,18 +100,22 @@ const TurnoverChart: React.FC<TurnoverChartProps> = ({ byType, tableData }) => {
             ],
           },
         },
-        emphasis: {
-          itemStyle: {
-            color: {
-              type: 'linear',
-              x: 0, y: 0, x2: 0, y2: 1,
-              colorStops: [
-                { offset: 0, color: '#F5E4B0' },
-                { offset: 1, color: '#C9A962' },
-              ],
-            },
-          },
-        },
+        emphasis: onDrilldown
+          ? {
+              itemStyle: {
+                color: {
+                  type: 'linear',
+                  x: 0, y: 0, x2: 0, y2: 1,
+                  colorStops: [
+                    { offset: 0, color: '#F5E4B0' },
+                    { offset: 1, color: '#C9A962' },
+                  ],
+                },
+                shadowColor: 'rgba(201, 169, 98, 0.4)',
+                shadowBlur: 10,
+              },
+            }
+          : undefined,
         label: {
           show: true,
           position: 'top',
@@ -87,26 +126,30 @@ const TurnoverChart: React.FC<TurnoverChartProps> = ({ byType, tableData }) => {
         },
       },
     ],
-  }), [byType]);
+  }), [byType, onDrilldown]);
 
   const scatterOption: EChartsOption = useMemo(() => {
     const types = Array.from(new Set(tableData.map(d => d.table_type)));
     const series = types.map(type => ({
       name: type,
       type: 'scatter' as const,
-      symbolSize: 14,
+      symbolSize: 16,
       itemStyle: {
         color: typeColorMap[type] || GOLD,
         opacity: 0.85,
         borderColor: TEXT,
         borderWidth: 1,
       },
-      emphasis: {
-        itemStyle: {
-          opacity: 1,
-          borderWidth: 2,
-        },
-      },
+      emphasis: onDrilldown
+        ? {
+            itemStyle: {
+              opacity: 1,
+              borderWidth: 3,
+              shadowColor: 'rgba(201, 169, 98, 0.5)',
+              shadowBlur: 15,
+            },
+          }
+        : undefined,
       data: tableData
         .filter(d => d.table_type === type)
         .map(d => [d.turnCount, d.totalRevenue, d.table_id, d.table_type, d.avgStayMinutes]),
@@ -122,13 +165,17 @@ const TurnoverChart: React.FC<TurnoverChartProps> = ({ byType, tableData }) => {
         textStyle: { color: TEXT },
         formatter: (params: any) => {
           const [, , tableId, tableType, avgStay] = params.data;
-          return `
+          let html = `
             <div style="font-weight:600;color:${GOLD};margin-bottom:6px;">桌号 ${tableId}</div>
             <div>类型：${tableType}</div>
             <div>翻台次数：${params.value[0]} 次</div>
             <div>营收：¥${params.value[1].toLocaleString('zh-CN')}</div>
             <div>平均停留：${avgStay} 分钟</div>
           `;
+          if (onDrilldown) {
+            html += `<div style="margin-top:6px;padding-top:4px;border-top:1px solid rgba(201,169,98,0.2);font-size:11px;color:${GOLD}">💡 点击查看该桌台明细</div>`;
+          }
+          return html;
         },
       },
       legend: {
@@ -164,42 +211,37 @@ const TurnoverChart: React.FC<TurnoverChartProps> = ({ byType, tableData }) => {
       },
       series,
     };
-  }, [tableData]);
+  }, [tableData, onDrilldown]);
 
   return (
-    <div className="card">
-      <div className="card-header">
-        <div>
-          <h3 className="card-title">翻台率分析</h3>
-          <p className="card-subtitle">桌型分类对比与翻台效率</p>
-        </div>
-        <div className="flex gap-1">
-          <button
-            onClick={() => setActiveTab('bar')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${
-              activeTab === 'bar'
-                ? 'bg-wine-700 text-ivory-200 border border-wine-600'
-                : 'bg-charcoal-800 text-charcoal-300 border border-charcoal-700 hover:border-gold-700/50'
-            }`}
-          >
-            桌型对比
-          </button>
-          <button
-            onClick={() => setActiveTab('scatter')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${
-              activeTab === 'scatter'
-                ? 'bg-wine-700 text-ivory-200 border border-wine-600'
-                : 'bg-charcoal-800 text-charcoal-300 border border-charcoal-700 hover:border-gold-700/50'
-            }`}
-          >
-            效率散点
-          </button>
-        </div>
+    <div>
+      <div className="flex gap-1 mb-2">
+        <button
+          onClick={() => setActiveTab('bar')}
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${
+            activeTab === 'bar'
+              ? 'bg-wine-700 text-ivory-200 border border-wine-600'
+              : 'bg-charcoal-800 text-charcoal-300 border border-charcoal-700 hover:border-gold-700/50'
+          }`}
+        >
+          桌型对比
+        </button>
+        <button
+          onClick={() => setActiveTab('scatter')}
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${
+            activeTab === 'scatter'
+              ? 'bg-wine-700 text-ivory-200 border border-wine-600'
+              : 'bg-charcoal-800 text-charcoal-300 border border-charcoal-700 hover:border-gold-700/50'
+          }`}
+        >
+          效率散点
+        </button>
       </div>
       <ReactECharts
         option={activeTab === 'bar' ? barOption : scatterOption}
-        style={{ height: 320, width: '100%' }}
+        style={{ height: 300, width: '100%' }}
         opts={{ renderer: 'canvas' }}
+        onEvents={activeTab === 'bar' ? barOnEvents : scatterOnEvents}
       />
     </div>
   );

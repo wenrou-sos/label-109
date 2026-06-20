@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(chuti:chuti)",
+      "Skill(chuti:chuti:*)"
+    ]
+  }
+}
